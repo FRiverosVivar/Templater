@@ -11,29 +11,24 @@ export function SignUpForm() {
   const navigate = useNavigate();
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
-  const [signUpError, setSignUpError] = useState("");
+  // ts-ignore
   const [isLoading, setIsLoading] = useState(false);
 
   const signUp = async () => {
     setIsLoading(true);
-    setSignUpError("");
 
     try {
-      const { data, error } = await supabase.auth.admin.createUser({
+      const { data } = await supabase.auth.admin.createUser({
         email: email,
         password: password,
         email_confirm: true,
       });
-      if (error) {
-        setSignUpError(error.message);
-      }
 
       if (data.user) {
         navigate("/dashboard");
       }
     } catch (error) {
       console.error("Sign up error:", error);
-      setSignUpError("An error occurred while signing up.");
     } finally {
       setIsLoading(false);
     }

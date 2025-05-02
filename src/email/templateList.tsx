@@ -290,7 +290,7 @@ export function TemplateList({ searchQuery }: TemplateListProps) {
     }
   };
 
-  const getStorageBadge = (storedIn: string, status: string) => {
+  const getStorageBadge = (storedIn: string) => {
     if (storedIn === "aws") {
       return (
         <Badge variant="outline" className="ml-2 flex items-center">
@@ -398,10 +398,7 @@ export function TemplateList({ searchQuery }: TemplateListProps) {
                                 template.status
                               )}`}
                             />
-                            {getStorageBadge(
-                              template.storedIn,
-                              template.status
-                            )}
+                            {getStorageBadge(template.storedIn)}
                           </CardTitle>
                           <CardDescription>
                             {template.description}

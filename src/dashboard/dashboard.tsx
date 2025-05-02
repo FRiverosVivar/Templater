@@ -21,7 +21,6 @@ import { TemplateStats } from "@/email/templateStats";
 import { IamUsersList } from "@/aws/iam-users-list";
 import { UserNav } from "@/email/userNav";
 import {
-  Mail,
   LayoutDashboard,
   Settings,
   Users,

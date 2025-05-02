@@ -45,7 +45,7 @@ export function IamUsersList() {
   const [users, setUsers] = useState(sampleIamUsers);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [isEditUserOpen, setIsEditUserOpen] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [, setSelectedUserId] = useState<number | null>(null);
 
   const handleEdit = (userId: number) => {
     setSelectedUserId(userId);
