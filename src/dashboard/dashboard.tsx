@@ -140,7 +140,7 @@ export function EmailDashboard() {
             </SidebarContent>
             <SidebarFooter className="p-4">
               <div className="text-xs text-muted-foreground">
-                MailMaster v1.0.0
+                templater.io v1.0.0
               </div>
             </SidebarFooter>
           </Sidebar>
