@@ -20,6 +20,7 @@ interface TemplatePreviewProps {
     description: string;
     category: string;
     status: string;
+    htmlContent?: string;
   };
   onClose: () => void;
 }
@@ -28,8 +29,10 @@ export function TemplatePreview({ template, onClose }: TemplatePreviewProps) {
   const [activeView, setActiveView] = useState("desktop");
   const [isSendTestOpen, setIsSendTestOpen] = useState(false);
 
-  // HTML de ejemplo para la vista previa
-  const previewHtml = `
+  // HTML de ejemplo para la vista previa si no hay contenido
+  const previewHtml =
+    template?.htmlContent ||
+    `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <div style="background-color: #f5f5f5; padding: 20px; text-align: center;">
         <h1 style="color: #333;">Hola, {{nombre}}!</h1>
@@ -92,7 +95,12 @@ export function TemplatePreview({ template, onClose }: TemplatePreviewProps) {
             className="border rounded-md p-4 bg-white overflow-auto"
             style={{ height: "600px", maxWidth: "800px", margin: "0 auto" }}
           >
-            <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
+            <iframe
+              srcDoc={previewHtml}
+              title="Email Preview - Desktop"
+              className="w-full h-full border-0"
+              sandbox="allow-same-origin"
+            />
           </motion.div>
         </TabsContent>
 
@@ -103,7 +111,12 @@ export function TemplatePreview({ template, onClose }: TemplatePreviewProps) {
             className="border rounded-md p-4 bg-white overflow-auto"
             style={{ height: "600px", maxWidth: "600px", margin: "0 auto" }}
           >
-            <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
+            <iframe
+              srcDoc={previewHtml}
+              title="Email Preview - Tablet"
+              className="w-full h-full border-0"
+              sandbox="allow-same-origin"
+            />
           </motion.div>
         </TabsContent>
 
@@ -114,7 +127,12 @@ export function TemplatePreview({ template, onClose }: TemplatePreviewProps) {
             className="border rounded-md p-4 bg-white overflow-auto"
             style={{ height: "600px", maxWidth: "375px", margin: "0 auto" }}
           >
-            <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
+            <iframe
+              srcDoc={previewHtml}
+              title="Email Preview - Mobile"
+              className="w-full h-full border-0"
+              sandbox="allow-same-origin"
+            />
           </motion.div>
         </TabsContent>
       </Tabs>

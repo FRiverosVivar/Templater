@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Card,
@@ -30,6 +30,7 @@ import {
   CloudOff,
   CloudIcon as CloudCheck,
   FileText,
+  Loader2,
 } from "lucide-react";
 import { TemplateEditor } from "@/email/templateEditor";
 import {
@@ -39,28 +40,103 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { TemplatePreview } from "@/email/templatePreview";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { awsSesService } from "@/aws/aws-ses-service";
+import { toast } from "sonner";
+// HTML y CSS de ejemplo para los templates
+const defaultHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Email Template</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f4;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #ffffff;
+    }
+    .header {
+      background-color: #4CAF50;
+      padding: 20px;
+      text-align: center;
+      color: white;
+    }
+    .content {
+      padding: 20px;
+      line-height: 1.5;
+    }
+    .footer {
+      background-color: #333333;
+      color: white;
+      text-align: center;
+      padding: 10px;
+      font-size: 12px;
+    }
+    .button {
+      display: inline-block;
+      background-color: #4CAF50;
+      color: white;
+      padding: 10px 20px;
+      text-decoration: none;
+      border-radius: 5px;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Hola, {{nombre}}!</h1>
+    </div>
+    <div class="content">
+      <p>Gracias por unirte a nuestra plataforma. Estamos emocionados de tenerte con nosotros.</p>
+      <p>Tu cuenta ha sido creada exitosamente y ahora puedes comenzar a explorar todas las funcionalidades que ofrecemos.</p>
+      <p>Si tienes alguna pregunta, no dudes en contactarnos respondiendo a este correo.</p>
+      <div style="text-align: center;">
+        <a href="{{link_confirmacion}}" class="button">Confirmar cuenta</a>
+      </div>
+      <p style="font-size: 12px; color: #777777; margin-top: 20px;">
+        Este correo fue enviado a {{email}}. Si no solicitaste esta cuenta, puedes ignorar este mensaje.
+      </p>
+    </div>
+    <div class="footer">
+      <p>© 2023 Tu Empresa. Todos los derechos reservados.</p>
+      <p>Dirección de la empresa, Ciudad, País</p>
+    </div>
+  </div>
+</body>
+</html>`;
 
-// Datos de ejemplo
-const templateData = [
-  {
-    id: 1,
-    name: "Bienvenida",
-    description: "Email de bienvenida para nuevos usuarios",
-    category: "Onboarding",
-    lastModified: "Hace 2 días",
-    status: "active",
-    storedIn: "aws",
-  },
-  {
-    id: 2,
-    name: "Recuperación de contraseña",
-    description: "Email para recuperar contraseña",
-    category: "Seguridad",
-    lastModified: "Hace 1 semana",
-    status: "active",
-    storedIn: "aws",
-  },
+const defaultCss = `/* Estilos adicionales */
+.header h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.content p {
+  margin-bottom: 15px;
+}
+
+.button:hover {
+  background-color: #45a049;
+}
+
+@media only screen and (max-width: 480px) {
+  .container {
+    width: 100%;
+  }
+  .header h1 {
+    font-size: 20px;
+  }
+}`;
+
+// Datos de ejemplo para templates locales
+const localTemplateData = [
   {
     id: 3,
     name: "Confirmación de compra",
@@ -69,15 +145,11 @@ const templateData = [
     lastModified: "Hace 3 días",
     status: "draft",
     storedIn: "supabase",
-  },
-  {
-    id: 4,
-    name: "Newsletter mensual",
-    description: "Newsletter con actualizaciones mensuales",
-    category: "Marketing",
-    lastModified: "Hace 2 semanas",
-    status: "active",
-    storedIn: "aws",
+    htmlContent: defaultHtml.replace(
+      "Hola, {{nombre}}!",
+      "Confirmación de Compra #{{order_id}}"
+    ),
+    cssContent: defaultCss,
   },
   {
     id: 5,
@@ -87,6 +159,11 @@ const templateData = [
     lastModified: "Hace 5 días",
     status: "draft",
     storedIn: "supabase",
+    htmlContent: defaultHtml.replace(
+      "Hola, {{nombre}}!",
+      "¡No olvides tu carrito, {{nombre}}!"
+    ),
+    cssContent: defaultCss,
   },
   {
     id: 6,
@@ -96,6 +173,11 @@ const templateData = [
     lastModified: "Hace 1 mes",
     status: "inactive",
     storedIn: "supabase",
+    htmlContent: defaultHtml.replace(
+      "Hola, {{nombre}}!",
+      "Actualización de Términos y Condiciones"
+    ),
+    cssContent: defaultCss,
   },
 ];
 
@@ -104,15 +186,72 @@ interface TemplateListProps {
 }
 
 export function TemplateList({ searchQuery }: TemplateListProps) {
-  const [templates, setTemplates] = useState(templateData);
+  const [localTemplates, setLocalTemplates] = useState(localTemplateData);
+  const [awsTemplates, setAwsTemplates] = useState<any[]>([]);
+  const [isLoadingAwsTemplates, setIsLoadingAwsTemplates] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState("all");
 
+  // Cargar templates de AWS SES
+  useEffect(() => {
+    const fetchAwsTemplates = async () => {
+      setIsLoadingAwsTemplates(true);
+      try {
+        // Verificar si hay credenciales de AWS
+        const credentials = awsSesService.loadCredentials();
+        if (!credentials) {
+          console.log("No AWS credentials found");
+          setIsLoadingAwsTemplates(false);
+          return;
+        }
+
+        // Obtener templates de AWS SES
+        const templates = await awsSesService.listTemplates();
+
+        // Convertir los templates de AWS al formato que necesitamos
+        const formattedTemplates = await Promise.all(
+          templates.map(async (template, index) => {
+            // Para cada template, obtener sus detalles
+            const templateDetail = await awsSesService.getTemplate(
+              template.Name
+            );
+
+            return {
+              id: 1000 + index, // IDs únicos para no colisionar con los locales
+              name: template.Name,
+              description: `Template de AWS SES: ${template.Name}`,
+              category: "AWS SES",
+              lastModified: template.CreatedTimestamp
+                ? new Date(template.CreatedTimestamp).toLocaleDateString()
+                : "Fecha desconocida",
+              status: "active",
+              storedIn: "aws",
+              htmlContent: templateDetail?.HtmlPart || defaultHtml,
+              cssContent: "",
+            };
+          })
+        );
+
+        setAwsTemplates(formattedTemplates);
+      } catch (error) {
+        console.error("Error fetching AWS templates:", error);
+        toast.error("No se pudieron cargar los templates de AWS SES");
+      } finally {
+        setIsLoadingAwsTemplates(false);
+      }
+    };
+
+    fetchAwsTemplates();
+  }, [toast]);
+
+  // Combinar templates locales y de AWS
+  const allTemplates = [...localTemplates, ...awsTemplates];
+
   // Filtrar templates basados en la búsqueda y estado
-  const filteredTemplates = templates.filter(
+  const filteredTemplates = allTemplates.filter(
     (template) =>
       (activeTab === "all" ||
         (activeTab === "active" && template.status === "active") ||
@@ -126,7 +265,16 @@ export function TemplateList({ searchQuery }: TemplateListProps) {
   );
 
   const handleDelete = (id: number) => {
-    setTemplates(templates.filter((template) => template.id !== id));
+    // Si es un template de AWS (ID >= 1000), mostramos un mensaje
+    if (id >= 1000) {
+      toast.error(
+        "No se pueden eliminar templates directamente de AWS SES desde esta interfaz"
+      );
+      return;
+    }
+
+    // Si es un template local, lo eliminamos
+    setLocalTemplates(localTemplates.filter((template) => template.id !== id));
   };
 
   const getStatusColor = (status: string) => {
@@ -175,7 +323,7 @@ export function TemplateList({ searchQuery }: TemplateListProps) {
             <TemplateEditor
               template={
                 selectedTemplate
-                  ? templates.find((t) => t.id === selectedTemplate)
+                  ? allTemplates.find((t) => t.id === selectedTemplate)
                   : undefined
               }
               onClose={() => {
@@ -193,147 +341,163 @@ export function TemplateList({ searchQuery }: TemplateListProps) {
             <FileText className="mr-2 h-4 w-4" />
             Todos
             <Badge variant="secondary" className="ml-2">
-              {templates.length}
+              {allTemplates.length}
             </Badge>
           </TabsTrigger>
           <TabsTrigger value="active" className="flex items-center">
             <CloudCheck className="mr-2 h-4 w-4" />
             Activos (AWS)
             <Badge variant="secondary" className="ml-2">
-              {templates.filter((t) => t.status === "active").length}
+              {allTemplates.filter((t) => t.status === "active").length}
             </Badge>
           </TabsTrigger>
           <TabsTrigger value="drafts" className="flex items-center">
             <FileText className="mr-2 h-4 w-4" />
             Borradores
             <Badge variant="secondary" className="ml-2">
-              {templates.filter((t) => t.status === "draft").length}
+              {allTemplates.filter((t) => t.status === "draft").length}
             </Badge>
           </TabsTrigger>
           <TabsTrigger value="inactive" className="flex items-center">
             <CloudOff className="mr-2 h-4 w-4" />
             Inactivos
             <Badge variant="secondary" className="ml-2">
-              {templates.filter((t) => t.status === "inactive").length}
+              {allTemplates.filter((t) => t.status === "inactive").length}
             </Badge>
           </TabsTrigger>
         </TabsList>
 
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <AnimatePresence>
-            {filteredTemplates.map((template) => (
-              <motion.div
-                key={template.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.2 }}
-                whileHover={{ y: -5 }}
-                className="h-full"
-              >
-                <Card className="h-full flex flex-col">
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle className="flex items-center flex-wrap">
-                          {template.name}
-                          <div
-                            className={`ml-2 h-2 w-2 rounded-full ${getStatusColor(
-                              template.status
-                            )}`}
-                          />
-                          {getStorageBadge(template.storedIn, template.status)}
-                        </CardTitle>
-                        <CardDescription>
-                          {template.description}
-                        </CardDescription>
-                      </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreVertical className="h-4 w-4" />
-                            <span className="sr-only">Acciones</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setSelectedTemplate(template.id);
-                              setIsEditorOpen(true);
-                            }}
-                          >
-                            <Edit className="mr-2 h-4 w-4" />
-                            <span>Editar</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setPreviewTemplate(template.id);
-                              setIsPreviewOpen(true);
-                            }}
-                          >
-                            <Eye className="mr-2 h-4 w-4" />
-                            <span>Vista previa</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Copy className="mr-2 h-4 w-4" />
-                            <span>Duplicar</span>
-                          </DropdownMenuItem>
-                          {template.status === "active" && (
-                            <DropdownMenuItem>
-                              <Send className="mr-2 h-4 w-4" />
-                              <span>Enviar prueba</span>
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={() => handleDelete(template.id)}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            <span>Eliminar</span>
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <Badge variant="outline">{template.category}</Badge>
-                  </CardContent>
-                  <CardFooter className="mt-auto text-sm text-muted-foreground">
-                    Modificado: {template.lastModified}
-                  </CardFooter>
-                </Card>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
+        <TabsContent value={activeTab}>
+          {isLoadingAwsTemplates && activeTab === "active" && (
+            <div className="flex justify-center items-center p-8">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <span className="ml-2">Cargando templates de AWS SES...</span>
+            </div>
+          )}
 
-        {filteredTemplates.length === 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex flex-col items-center justify-center p-12 text-center"
-          >
-            <Mail className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium">No se encontraron templates</h3>
-            <p className="text-muted-foreground mt-2">
-              {searchQuery
-                ? "Intenta con otra búsqueda"
-                : activeTab !== "all"
-                ? `No hay templates ${
-                    activeTab === "active"
-                      ? "activos"
-                      : activeTab === "drafts"
-                      ? "en borrador"
-                      : "inactivos"
-                  }`
-                : "Crea tu primer template para comenzar"}
-            </p>
-            <Button className="mt-4" onClick={() => setIsEditorOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Nuevo Template
-            </Button>
-          </motion.div>
-        )}
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <AnimatePresence>
+              {filteredTemplates.map((template) => (
+                <motion.div
+                  key={template.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  whileHover={{ y: -5 }}
+                  className="h-full"
+                >
+                  <Card className="h-full flex flex-col">
+                    <CardHeader>
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <CardTitle className="flex items-center flex-wrap">
+                            {template.name}
+                            <div
+                              className={`ml-2 h-2 w-2 rounded-full ${getStatusColor(
+                                template.status
+                              )}`}
+                            />
+                            {getStorageBadge(
+                              template.storedIn,
+                              template.status
+                            )}
+                          </CardTitle>
+                          <CardDescription>
+                            {template.description}
+                          </CardDescription>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreVertical className="h-4 w-4" />
+                              <span className="sr-only">Acciones</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedTemplate(template.id);
+                                setIsEditorOpen(true);
+                              }}
+                            >
+                              <Edit className="mr-2 h-4 w-4" />
+                              <span>Editar</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setPreviewTemplate(template.id);
+                                setIsPreviewOpen(true);
+                              }}
+                            >
+                              <Eye className="mr-2 h-4 w-4" />
+                              <span>Vista previa</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <Copy className="mr-2 h-4 w-4" />
+                              <span>Duplicar</span>
+                            </DropdownMenuItem>
+                            {template.status === "active" && (
+                              <DropdownMenuItem>
+                                <Send className="mr-2 h-4 w-4" />
+                                <span>Enviar prueba</span>
+                              </DropdownMenuItem>
+                            )}
+                            {template.storedIn !== "aws" && (
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => handleDelete(template.id)}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                <span>Eliminar</span>
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <Badge variant="outline">{template.category}</Badge>
+                    </CardContent>
+                    <CardFooter className="mt-auto text-sm text-muted-foreground">
+                      Modificado: {template.lastModified}
+                    </CardFooter>
+                  </Card>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+
+          {filteredTemplates.length === 0 && !isLoadingAwsTemplates && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex flex-col items-center justify-center p-12 text-center"
+            >
+              <Mail className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium">
+                No se encontraron templates
+              </h3>
+              <p className="text-muted-foreground mt-2">
+                {searchQuery
+                  ? "Intenta con otra búsqueda"
+                  : activeTab !== "all"
+                  ? `No hay templates ${
+                      activeTab === "active"
+                        ? "activos"
+                        : activeTab === "drafts"
+                        ? "en borrador"
+                        : "inactivos"
+                    }`
+                  : "Crea tu primer template para comenzar"}
+              </p>
+              <Button className="mt-4" onClick={() => setIsEditorOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Nuevo Template
+              </Button>
+            </motion.div>
+          )}
+        </TabsContent>
       </Tabs>
 
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
@@ -342,7 +506,7 @@ export function TemplateList({ searchQuery }: TemplateListProps) {
           <TemplatePreview
             template={
               previewTemplate
-                ? templates.find((t) => t.id === previewTemplate)
+                ? allTemplates.find((t) => t.id === previewTemplate)
                 : undefined
             }
             onClose={() => {

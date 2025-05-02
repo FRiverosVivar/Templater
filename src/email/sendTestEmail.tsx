@@ -7,8 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Send, Plus, Trash2 } from "lucide-react";
-import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
+import { toast } from "sonner";
 
 interface SendTestEmailProps {
   template?: {
@@ -17,6 +17,7 @@ interface SendTestEmailProps {
     description: string;
     category: string;
     status: string;
+    htmlContent?: string;
   };
   onClose: () => void;
 }
@@ -69,9 +70,8 @@ export function SendTestEmail({ template, onClose }: SendTestEmailProps) {
 
   // Enviar el correo de prueba
   const sendTestEmail = () => {
-    toast("Correo de prueba enviado", {
-      description: `Se ha enviado un correo de prueba a ${recipients}`,
-    });
+    // Aquí iría la lógica para enviar el correo
+    toast.success(`Se ha enviado un correo de prueba a ${recipients}`);
     onClose();
   };
 
